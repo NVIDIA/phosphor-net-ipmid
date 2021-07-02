@@ -52,6 +52,26 @@ void Table::executeCommand(uint32_t inCommand,
     {
         CommandID command(inCommand);
 
+        // Do not forward any session zero commands to ipmid
+        if (handler->sessionID == session::sessionZero)
+        {
+            log<level::INFO>("Table: refuse to forward session-zero command",
+                             entry("LUN=%x", command.lun()),
+                             entry("NETFN=%x", command.netFn()),
+                             entry("CMD=%x", command.cmd()));
+            return;
+        }
+        std::shared_ptr<session::Session> session =
+            std::get<session::Manager&>(singletonPool)
+                .getSession(handler->sessionID);
+
+        // Ignore messages that are not part of an active session
+        auto state = static_cast<session::State>(session->state());
+        if (state != session::State::active)
+        {
+            return;
+        }
+
         auto bus = getSdBus();
         // forward the request onto the main ipmi queue
         using IpmiDbusRspType = std::tuple<uint8_t, uint8_t, uint8_t, uint8_t,
@@ -59,9 +79,7 @@ void Table::executeCommand(uint32_t inCommand,
         uint8_t lun = command.lun();
         uint8_t netFn = command.netFn();
         uint8_t cmd = command.cmd();
-        std::shared_ptr<session::Session> session =
-            std::get<session::Manager&>(singletonPool)
-                .getSession(handler->sessionID);
+
         std::map<std::string, ipmi::Value> options = {
             {"userId", ipmi::Value(static_cast<int>(
                            ipmi::ipmiUserGetUserId(session->userName)))},
@@ -99,6 +117,20 @@ void Table::executeCommand(uint32_t inCommand,
     else
     {
         auto start = std::chrono::steady_clock::now();
+
+        // Ignore messages that are not part of an active/pre-active session
+        if (handler->sessionID != session::sessionZero)
+        {
+            std::shared_ptr<session::Session> session =
+                std::get<session::Manager&>(singletonPool)
+                    .getSession(handler->sessionID);
+            auto state = static_cast<session::State>(session->state());
+            if ((state != session::State::setupInProgress) &&
+                (state != session::State::active))
+            {
+                return;
+            }
+        }
 
         handler->outPayload =
             iterator->second->executeCommand(commandData, handler);
