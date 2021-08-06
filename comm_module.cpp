@@ -6,7 +6,6 @@
 #include "command/rakp34.hpp"
 #include "command/session_cmds.hpp"
 #include "command_table.hpp"
-#include "main.hpp"
 #include "session.hpp"
 
 #include <algorithm>
@@ -41,6 +40,12 @@ void sessionSetupCommands()
          &GetChannelCapabilities,
          session::Privilege::HIGHEST_MATCHING,
          true},
+        // Get Channel Cipher Suites Command
+        {{(static_cast<uint32_t>(message::PayloadType::IPMI) << 16) |
+          static_cast<uint16_t>(::command::NetFns::APP) | 0x54},
+         &getChannelCipherSuites,
+         session::Privilege::HIGHEST_MATCHING,
+         true},
         // Set Session Privilege Command
         {{(static_cast<uint32_t>(message::PayloadType::IPMI) << 16) |
           static_cast<uint16_t>(command::NetFns::APP) | 0x3B},
@@ -57,11 +62,10 @@ void sessionSetupCommands()
 
     for (auto& iter : commands)
     {
-        std::get<command::Table&>(singletonPool)
-            .registerCommand(iter.command,
-                             std::make_unique<command::NetIpmidEntry>(
-                                 iter.command, iter.functor, iter.privilege,
-                                 iter.sessionless));
+        command::Table::get().registerCommand(
+            iter.command,
+            std::make_unique<command::NetIpmidEntry>(
+                iter.command, iter.functor, iter.privilege, iter.sessionless));
     }
 }
 

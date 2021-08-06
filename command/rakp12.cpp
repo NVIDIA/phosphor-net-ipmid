@@ -3,7 +3,7 @@
 #include "comm_module.hpp"
 #include "endian.hpp"
 #include "guid.hpp"
-#include "main.hpp"
+#include "sessions_manager.hpp"
 
 #include <openssl/rand.h>
 
@@ -23,8 +23,21 @@ bool isChannelAccessModeEnabled(const uint8_t accessMode)
            static_cast<uint8_t>(ipmi::EChannelAccessMode::disabled);
 }
 
+void logInvalidLoginRedfishEvent(const std::string& journalMsg,
+                                 const std::optional<std::string>& messageArgs)
+{
+    static constexpr std::string_view openBMCMessageRegistryVersion = "0.1.";
+    std::string messageID = "OpenBMC." +
+                            std::string(openBMCMessageRegistryVersion) +
+                            "InvalidLoginAttempted";
+    phosphor::logging::log<phosphor::logging::level::ERR>(
+        journalMsg.c_str(),
+        phosphor::logging::entry("REDFISH_MESSAGE_ID=%s", messageID.c_str()),
+        phosphor::logging::entry("REDFISH_MESSAGE_ARGS=%s",
+                                 messageArgs.value().c_str()));
+}
 std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
-                            const message::Handler& handler)
+                            std::shared_ptr<message::Handler>& handler)
 {
     auto request = reinterpret_cast<const RAKP1request*>(inPayload.data());
     // verify inPayload minimum size
@@ -50,9 +63,8 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
     std::shared_ptr<session::Session> session;
     try
     {
-        session =
-            std::get<session::Manager&>(singletonPool)
-                .getSession(endian::from_ipmi(request->managedSystemSessionID));
+        session = session::Manager::get().getSession(
+            endian::from_ipmi(request->managedSystemSessionID));
     }
     catch (std::exception& e)
     {
@@ -66,12 +78,14 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
     auto rakp1Size =
         sizeof(RAKP1request) - (userNameMaxLen - request->user_name_len);
 
+    std::string message = "Invalid login attempted via RCMPP interface ";
     // Validate user name length in the message
     if (request->user_name_len > userNameMaxLen ||
         inPayload.size() != rakp1Size)
     {
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::INVALID_NAME_LENGTH);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
 
@@ -158,17 +172,21 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
         // Yes, NULL user name is not supported for security reasons.
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::UNAUTH_NAME);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
 
     // Perform user name based lookup
     std::string userName(request->user_name, request->user_name_len);
     std::string passwd;
+
+    message += "user: " + userName;
     uint8_t userId = ipmi::ipmiUserGetUserId(userName);
     if (userId == ipmi::invalidUserId)
     {
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::UNAUTH_NAME);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
     // check user is enabled before proceeding.
@@ -178,6 +196,7 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
     {
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::INACTIVE_ROLE);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
     // Get the user password for RAKP message authenticate
@@ -186,6 +205,7 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
     {
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::UNAUTH_NAME);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
     // Check whether user is already locked for failed attempts
@@ -196,6 +216,7 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
 
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::UNAUTH_NAME);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
 
@@ -208,6 +229,7 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
     {
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::INACTIVE_ROLE);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
     if (!isChannelAccessModeEnabled(session->sessionChannelAccess.accessMode))
@@ -216,6 +238,7 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
             "Channel access mode disabled.");
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::INACTIVE_ROLE);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
     if (session->sessionUserPrivAccess.privilege >
@@ -223,6 +246,7 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
     {
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::INACTIVE_ROLE);
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
     session->channelNum(chNum);
@@ -254,6 +278,8 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
             "Username/Privilege lookup failed for requested privilege");
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::UNAUTH_NAME);
+
+        logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
 

@@ -120,6 +120,24 @@ struct GetChannelCapabilitiesResp
  */
 std::vector<uint8_t>
     GetChannelCapabilities(const std::vector<uint8_t>& inPayload,
-                           const message::Handler& handler);
+                           std::shared_ptr<message::Handler>& handler);
+
+/**
+ * @brief Get Channel Cipher Suites
+ *
+ * This command is used to look up what authentication, integrity, and
+ * confidentiality algorithms are supported. The algorithms are used in
+ * combination as ‘Cipher Suites’. This command only applies to implementations
+ * that support IPMI v2.0/RMCP+ sessions. This command can be executed prior to
+ * establishing a session with the BMC.
+ *
+ * @param[in] inPayload - Request Data for the command
+ * @param[in] handler - Reference to the Message Handler
+ *
+ * @return Response data for the command
+ */
+std::vector<uint8_t>
+    getChannelCipherSuites(const std::vector<uint8_t>& inPayload,
+                           std::shared_ptr<message::Handler>& handler);
 
 } // namespace command

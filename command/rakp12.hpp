@@ -73,6 +73,15 @@ struct RAKP2response
  * @return Response data for the command
  */
 std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
-                            const message::Handler& handler);
-
+                            std::shared_ptr<message::Handler>& handler);
+/**
+ *@brief Log Redfish event for invalid login attempted on RMCPP interface
+ *
+ * @param[in] journalMsg - Show journal Debug Message in journal logs
+ * @param[in] redfishMsg - Log Redfish Event Message
+ *
+ */
+void logInvalidLoginRedfishEvent(
+    const std::string& journalMsg,
+    const std::optional<std::string>& messageArgs = "RMCPP");
 } // namespace command
