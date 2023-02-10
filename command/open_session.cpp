@@ -4,15 +4,14 @@
 #include "endian.hpp"
 #include "sessions_manager.hpp"
 
-#include <phosphor-logging/log.hpp>
-
-using namespace phosphor::logging;
+#include <phosphor-logging/lg2.hpp>
 
 namespace command
 {
 
-std::vector<uint8_t> openSession(const std::vector<uint8_t>& inPayload,
-                                 std::shared_ptr<message::Handler>& handler)
+std::vector<uint8_t>
+    openSession(const std::vector<uint8_t>& inPayload,
+                std::shared_ptr<message::Handler>& /* handler */)
 {
     auto request =
         reinterpret_cast<const OpenSessionRequest*>(inPayload.data());
@@ -87,8 +86,8 @@ std::vector<uint8_t> openSession(const std::vector<uint8_t>& inPayload,
     {
         response->status_code =
             static_cast<uint8_t>(RAKP_ReturnCode::INSUFFICIENT_RESOURCE);
-        log<level::ERR>("openSession : Problem opening a session",
-                        entry("EXCEPTION=%s", e.what()));
+        lg2::error("openSession : Problem opening a session: {ERROR}", "ERROR",
+                   e);
         return outPayload;
     }
 

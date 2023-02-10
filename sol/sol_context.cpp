@@ -6,7 +6,9 @@
 #include "sessions_manager.hpp"
 #include "sol_manager.hpp"
 
-#include <phosphor-logging/log.hpp>
+#include <errno.h>
+
+#include <phosphor-logging/lg2.hpp>
 
 namespace sol
 {
@@ -80,7 +82,7 @@ void Context::enableRetryTimer(bool enable)
 }
 
 void Context::processInboundPayload(uint8_t seqNum, uint8_t ackSeqNum,
-                                    uint8_t count, bool status,
+                                    uint8_t count, bool status, bool isBreak,
                                     const std::vector<uint8_t>& input)
 {
     uint8_t respAckSeqNum = 0;
@@ -96,7 +98,7 @@ void Context::processInboundPayload(uint8_t seqNum, uint8_t ackSeqNum,
      */
     if (seqNum && (seqNum != seqNums.get(true)))
     {
-        log<level::INFO>("Out of sequence SOL packet - packet is dropped");
+        lg2::info("Out of sequence SOL packet - packet is dropped");
         return;
     }
 
@@ -108,7 +110,7 @@ void Context::processInboundPayload(uint8_t seqNum, uint8_t ackSeqNum,
      */
     if (ackSeqNum && (ackSeqNum != seqNums.get(false)))
     {
-        log<level::INFO>("Out of sequence ack number - SOL packet is dropped");
+        lg2::info("Out of sequence ack number - SOL packet is dropped");
         return;
     }
 
@@ -143,13 +145,28 @@ void Context::processInboundPayload(uint8_t seqNum, uint8_t ackSeqNum,
         payloadCache.clear();
     }
 
+    if (isBreak && seqNum)
+    {
+        lg2::info("Writing break to console socket descriptor");
+        constexpr uint8_t sysrqValue = 72; // use this to notify sol server
+        const std::vector<uint8_t> test{sysrqValue};
+        auto ret = sol::Manager::get().writeConsoleSocket(test, isBreak);
+        if (ret)
+        {
+            lg2::error("Writing to console socket descriptor failed: {ERROR}",
+                       "ERROR", strerror(errno));
+        }
+    }
+
+    isBreak = false;
     // Write character data to the Host Console
     if (!input.empty() && seqNum)
     {
-        auto rc = sol::Manager::get().writeConsoleSocket(input);
+        auto rc = sol::Manager::get().writeConsoleSocket(input, isBreak);
         if (rc)
         {
-            log<level::ERR>("Writing to console socket descriptor failed");
+            lg2::error("Writing to console socket descriptor failed: {ERROR}",
+                       "ERROR", strerror(errno));
             ack = true;
         }
         else
@@ -283,7 +300,8 @@ void Context::charAccTimerHandler()
     }
     catch (const std::exception& e)
     {
-        log<level::ERR>(e.what());
+        lg2::error("Failed to call the sendOutboundPayload method: {ERROR}",
+                   "ERROR", e);
     }
 }
 
@@ -307,7 +325,7 @@ void Context::retryTimerHandler()
     }
     catch (const std::exception& e)
     {
-        log<level::ERR>(e.what());
+        lg2::error("Failed to retry timer: {ERROR}", "ERROR", e);
     }
 }
 } // namespace sol

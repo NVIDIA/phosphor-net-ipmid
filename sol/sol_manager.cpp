@@ -10,11 +10,12 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/local/stream_protocol.hpp>
 #include <boost/asio/write.hpp>
+#include <ipmid/utils.hpp>
+#include <phosphor-logging/lg2.hpp>
+#include <sdbusplus/message/types.hpp>
+
 #include <chrono>
 #include <cmath>
-#include <ipmid/utils.hpp>
-#include <phosphor-logging/log.hpp>
-#include <sdbusplus/message/types.hpp>
 
 constexpr const char* solInterface = "xyz.openbmc_project.Ipmi.SOL";
 constexpr const char* solPath = "/xyz/openbmc_project/ipmi/sol/";
@@ -22,9 +23,6 @@ constexpr const char* PROP_INTF = "org.freedesktop.DBus.Properties";
 
 namespace sol
 {
-
-using namespace phosphor::logging;
-
 std::unique_ptr<sdbusplus::bus::match_t> matchPtrSOL(nullptr);
 std::unique_ptr<sdbusplus::bus::match_t> solConfPropertiesSignal(nullptr);
 
@@ -50,8 +48,9 @@ void Manager::consoleInputHandler()
     }
     else
     {
-        log<level::ERR>("Reading ready count from host console socket failed:",
-                        entry("EXCEPTION=%s", ec.message().c_str()));
+        lg2::error(
+            "Reading ready count from host console socket failed: {ERROR}",
+            "ERROR", ec.value());
         return;
     }
     std::vector<uint8_t> buffer(readSize);
@@ -60,8 +59,8 @@ void Manager::consoleInputHandler()
         consoleSocket->read_some(boost::asio::buffer(buffer), ec);
     if (ec)
     {
-        log<level::ERR>("Reading from host console socket failed:",
-                        entry("EXCEPTION=%s", ec.message().c_str()));
+        lg2::error("Reading from host console socket failed: {ERROR}", "ERROR",
+                   ec.value());
         return;
     }
 
@@ -70,10 +69,19 @@ void Manager::consoleInputHandler()
     dataBuffer.write(buffer);
 }
 
-int Manager::writeConsoleSocket(const std::vector<uint8_t>& input) const
+int Manager::writeConsoleSocket(const std::vector<uint8_t>& input,
+                                bool breakFlag) const
 {
     boost::system::error_code ec;
-    boost::asio::write(*consoleSocket, boost::asio::buffer(input), ec);
+    if (breakFlag)
+    {
+        consoleSocket->send(boost::asio::buffer(input), MSG_OOB, ec);
+    }
+    else
+    {
+        consoleSocket->send(boost::asio::buffer(input), 0, ec);
+    }
+
     return ec.value();
 }
 
@@ -112,7 +120,7 @@ void Manager::stopHostConsole()
 void Manager::updateSOLParameter(uint8_t channelNum)
 {
     std::variant<uint8_t, bool> value;
-    sdbusplus::bus::bus dbus(ipmid_get_sd_bus_connection());
+    sdbusplus::bus_t dbus(ipmid_get_sd_bus_connection());
     static std::string solService{};
     ipmi::PropertyMap properties;
     std::string ethdevice = ipmi::getChannelName(channelNum);
@@ -127,8 +135,7 @@ void Manager::updateSOLParameter(uint8_t channelNum)
         catch (const std::runtime_error& e)
         {
             solService.clear();
-            phosphor::logging::log<phosphor::logging::level::ERR>(
-                "Error: get SOL service failed");
+            lg2::error("Get SOL service failed: {ERROR}", "ERROR", e);
             return;
         }
     }
@@ -137,10 +144,9 @@ void Manager::updateSOLParameter(uint8_t channelNum)
         properties = ipmi::getAllDbusProperties(
             dbus, solService, solPathWitheEthName, solInterface);
     }
-    catch (const std::runtime_error&)
+    catch (const std::runtime_error& e)
     {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "Error setting sol parameter");
+        lg2::error("Setting sol parameter: {ERROR}", "ERROR", e);
         return;
     }
 
@@ -180,9 +186,9 @@ void Manager::startPayloadInstance(uint8_t payloadInstance,
         }
         catch (const std::exception& e)
         {
-            log<level::ERR>("Encountered exception when starting host console. "
-                            "Hence stopping host console.",
-                            entry("EXCEPTION=%s", e.what()));
+            lg2::error(
+                "Encountered exception when starting host console. Hence stopping host console: {ERROR}",
+                "ERROR", e);
             stopHostConsole();
             throw;
         }
@@ -226,7 +232,7 @@ void Manager::stopAllPayloadInstance()
 void registerSOLServiceChangeCallback()
 {
     using namespace sdbusplus::bus::match::rules;
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     try
     {
         auto servicePath = ipmi::getDbusObject(
@@ -243,7 +249,7 @@ void registerSOLServiceChangeCallback()
                     ", " +
                     type::signal() + member("PropertiesChanged") +
                     interface("org.freedesktop.DBus.Properties"),
-                [](sdbusplus::message::message& msg) {
+                [](sdbusplus::message_t& msg) {
                     std::string intfName;
                     std::map<std::string, std::variant<bool>> properties;
                     msg.read(intfName, properties);
@@ -264,12 +270,13 @@ void registerSOLServiceChangeCallback()
     }
     catch (const sdbusplus::exception_t& e)
     {
-        log<level::ERR>(
-            "Failed to get service path in registerSOLServiceChangeCallback");
+        lg2::error(
+            "Failed to get service path in registerSOLServiceChangeCallback: {ERROR}",
+            "ERROR", e);
     }
 }
 
-void procSolConfChange(sdbusplus::message::message& msg)
+void procSolConfChange(sdbusplus::message_t& msg)
 {
     using SolConfVariant = std::variant<bool, uint8_t>;
     using SolConfProperties =
@@ -284,9 +291,8 @@ void procSolConfChange(sdbusplus::message::message& msg)
     }
     catch (const std::exception& e)
     {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "procSolConfChange get properties FAIL",
-            entry("ERROR=%s", e.what()));
+        lg2::error("procSolConfChange get properties FAIL: {ERROR}", "ERROR",
+                   e);
         return;
     }
 
@@ -339,7 +345,7 @@ void registerSolConfChangeCallbackHandler(std::string channel)
     if (solConfPropertiesSignal == nullptr)
     {
         using namespace sdbusplus::bus::match::rules;
-        sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+        sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
         try
         {
             auto servicePath = solPath + channel;
@@ -350,9 +356,9 @@ void registerSolConfChangeCallbackHandler(std::string channel)
         }
         catch (const sdbusplus::exception_t& e)
         {
-            log<level::ERR>("Failed to get service path in "
-                            "registerSolConfChangeCallbackHandler",
-                            entry("CHANNEL=%s", channel.c_str()));
+            lg2::error(
+                "Failed to get service path in registerSolConfChangeCallbackHandler, channel: {CHANNEL}, error: {ERROR}",
+                "CHANNEL", channel, "ERROR", e);
         }
     }
     return;

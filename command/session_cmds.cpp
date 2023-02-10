@@ -5,16 +5,16 @@
 
 #include <ipmid/api.h>
 
-#include <chrono>
 #include <ipmid/sessionhelper.hpp>
 #include <ipmid/utils.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
+
+#include <chrono>
 
 using namespace std::chrono_literals;
 
 namespace command
 {
-using namespace phosphor::logging;
 
 std::vector<uint8_t>
     setSessionPrivilegeLevel(const std::vector<uint8_t>& inPayload,
@@ -118,10 +118,9 @@ uint8_t setSessionState(std::shared_ptr<sdbusplus::asio::connection>& busp,
     }
     catch (const std::exception& e)
     {
-        log<level::ERR>("Failed in getting session state property",
-                        entry("service=%s", service.c_str()),
-                        entry("object path=%s", obj.c_str()),
-                        entry("interface=%s", session::sessionIntf));
+        lg2::error(
+            "Failed in getting session state property: {SERVICE}, {PATH}, {INTERFACE}",
+            "SERVICE", service, "PATH", obj, "INTERFACE", session::sessionIntf);
         return ipmi::ccUnspecifiedError;
     }
 
@@ -167,11 +166,11 @@ uint8_t closeOtherNetInstanceSession(const uint32_t reqSessionId,
             }
         }
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
-        log<level::ERR>("Failed to fetch object from dbus",
-                        entry("INTERFACE=%s", session::sessionIntf),
-                        entry("ERRMSG=%s", e.what()));
+        lg2::error(
+            "Failed to fetch object from dbus, interface: {INTERFACE}, error: {ERROR}",
+            "INTERFACE", session::sessionIntf, "ERROR", e);
         return ipmi::ccUnspecifiedError;
     }
 
@@ -198,9 +197,9 @@ uint8_t closeMyNetInstanceSession(uint32_t reqSessionId,
     }
     catch (const std::exception& e)
     {
-        log<level::ERR>("Failed to get session manager instance or sessionID "
-                        "by sessionHandle",
-                        entry("ERRMSG=%s", e.what()));
+        lg2::error(
+            "Failed to get session manager instance or sessionID by sessionHandle: {ERROR}",
+            "ERROR", e);
         return session::ccInvalidSessionHandle;
     }
 
@@ -217,8 +216,9 @@ uint8_t closeMyNetInstanceSession(uint32_t reqSessionId,
     }
     catch (const std::exception& e)
     {
-        log<level::ERR>("Failed to get session manager instance or sessionID",
-                        entry("ERRMSG=%s", e.what()));
+        lg2::error(
+            "Failed to get session manager instance or sessionID: {ERROR}",
+            "ERROR", e);
         return session::ccInvalidSessionId;
     }
 
@@ -233,9 +233,9 @@ uint8_t closeMyNetInstanceSession(uint32_t reqSessionId,
     }
     catch (const std::exception& e)
     {
-        log<level::ERR>(
-            "Failed to get session manager instance or stop session",
-            entry("ERRMSG=%s", e.what()));
+        lg2::error(
+            "Failed to get session manager instance or stop session: {ERROR}",
+            "ERROR", e);
         return ipmi::ccUnspecifiedError;
     }
 
@@ -297,11 +297,11 @@ std::vector<uint8_t> closeSession(const std::vector<uint8_t>& inPayload,
             session::Manager::get().getSession(handler->sessionID);
         currentSessionPriv = currentSession->currentPrivilege();
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
-        log<level::ERR>("Failed to fetch object from dbus",
-                        entry("INTERFACE=%s", session::sessionIntf),
-                        entry("ERRMSG=%s", e.what()));
+        lg2::error(
+            "Failed to fetch object from dbus, interface: {INTERFACE}, error: {ERROR}",
+            "INTERFACE", session::sessionIntf, "ERROR", e);
         response->completionCode = ipmi::ccUnspecifiedError;
         return outPayload;
     }

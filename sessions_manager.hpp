@@ -4,9 +4,10 @@
 #include "session.hpp"
 
 #include <boost/asio/steady_timer.hpp>
-#include <chrono>
 #include <ipmid/api.hpp>
 #include <ipmid/sessiondef.hpp>
+
+#include <chrono>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -35,8 +36,7 @@ class Manager
 {
   private:
     struct Private
-    {
-    };
+    {};
 
   public:
     // BMC Session ID is the key for the map
@@ -158,7 +158,7 @@ class Manager
      *        associative container with Session ID as the unique key
      */
     SessionMap sessionsMap;
-    std::unique_ptr<sdbusplus::server::manager::manager> objManager = nullptr;
+    std::unique_ptr<sdbusplus::server::manager_t> objManager = nullptr;
     std::string chName{}; // Channel Name
     uint8_t ipmiNetworkInstance = 0;
     void setNetworkInstance(void);

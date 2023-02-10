@@ -4,9 +4,10 @@
 #include <sys/types.h>
 
 #include <boost/asio/ip/udp.hpp>
+#include <phosphor-logging/lg2.hpp>
+
 #include <memory>
 #include <optional>
-#include <phosphor-logging/log.hpp>
 #include <string>
 #include <tuple>
 #include <variant>
@@ -42,8 +43,7 @@ class Channel
      */
     explicit Channel(std::shared_ptr<boost::asio::ip::udp::socket> socket) :
         socket(socket)
-    {
-    }
+    {}
     /**
      * @brief Check if ip address is ipv4 mapped ipv6
      *
@@ -99,9 +99,7 @@ class Channel
         {
             return retval;
         }
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "Error in inet_ntop",
-            phosphor::logging::entry("ERROR=%s", strerror(errno)));
+        lg2::error("Error in inet_ntop: {ERROR}", "ERROR", strerror(errno));
         return std::string();
     }
 
@@ -154,9 +152,8 @@ class Channel
         if (bytesReceived < 0)
         {
             // something bad happened; bail
-            phosphor::logging::log<phosphor::logging::level::ERR>(
-                "Error in recvmsg",
-                phosphor::logging::entry("ERROR=%s", strerror(errno)));
+            lg2::error("Error in recvmsg: {ERROR}", "ERROR",
+                       strerror(-bytesReceived));
             return std::make_tuple(-errno, std::vector<uint8_t>());
         }
         // save the size of either ipv4 or i4v6 sockaddr
@@ -224,9 +221,7 @@ class Channel
         int ret = sendmsg(socket->native_handle(), &msg, 0);
         if (ret < 0)
         {
-            phosphor::logging::log<phosphor::logging::level::ERR>(
-                "Error in sendmsg",
-                phosphor::logging::entry("ERROR=%s", strerror(errno)));
+            lg2::error("Error in sendmsg: {ERROR}", "ERROR", strerror(-ret));
         }
         return ret;
     }

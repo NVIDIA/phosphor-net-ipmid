@@ -3,7 +3,8 @@
 #include <ipmid/api.h>
 #include <mapper.h>
 
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
+
 #include <sstream>
 #include <string>
 
@@ -44,9 +45,8 @@ Guid getSystemGUID()
         int rc = mapper_get_service(bus, guidObjPath, &busname);
         if (rc < 0)
         {
-            log<level::ERR>("Failed to get bus name",
-                            entry("PATH=%s", guidObjPath),
-                            entry("ERROR=%s", strerror(-rc)));
+            lg2::error("Failed to get bus name, path: {PATH}, error: {ERROR}",
+                       "PATH", guidObjPath, "ERROR", strerror(-rc));
             break;
         }
 
@@ -54,16 +54,16 @@ Guid getSystemGUID()
                                 &error, &reply, "ss", chassisIntf, "uuid");
         if (rc < 0)
         {
-            log<level::ERR>("Failed to call Get Method",
-                            entry("ERROR=%s", strerror(-rc)));
+            lg2::error("Failed to call Get Method: {ERROR}", "ERROR",
+                       strerror(-rc));
             break;
         }
 
         rc = sd_bus_message_read(reply, "v", "s", &uuid);
         if (rc < 0 || uuid == NULL)
         {
-            log<level::ERR>("Failed to get a response",
-                            entry("ERROR=%s", strerror(-rc)));
+            lg2::error("Failed to get a response: {ERROR}", "ERROR",
+                       strerror(-rc));
             break;
         }
 
@@ -91,15 +91,13 @@ void registerGUIDChangeCallback()
     if (matchPtr == nullptr)
     {
         using namespace sdbusplus::bus::match::rules;
-        sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+        sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
 
         matchPtr = std::make_unique<sdbusplus::bus::match_t>(
             bus,
             path_namespace(guidObjPath) + type::signal() +
                 member("PropertiesChanged") + interface(propInterface),
-            [](sdbusplus::message::message&) {
-                cache::guid = getSystemGUID();
-            });
+            [](sdbusplus::message_t&) { cache::guid = getSystemGUID(); });
     }
 }
 

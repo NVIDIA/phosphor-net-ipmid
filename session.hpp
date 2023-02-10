@@ -7,20 +7,21 @@
 #include "prng.hpp"
 #include "socket_channel.hpp"
 
-#include <chrono>
-#include <exception>
 #include <ipmid/api.hpp>
 #include <ipmid/sessiondef.hpp>
-#include <list>
-#include <memory>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
-#include <string>
-#include <unordered_map>
 #include <user_channel/channel_layer.hpp>
 #include <user_channel/user_layer.hpp>
-#include <vector>
 #include <xyz/openbmc_project/Ipmi/SessionInfo/server.hpp>
+
+#include <chrono>
+#include <exception>
+#include <list>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace session
 {
@@ -92,7 +93,7 @@ struct SequenceNumbers
  * implementation support at least four simultaneous sessions
  */
 
-using SessionIface = sdbusplus::server::object::object<
+using SessionIface = sdbusplus::server::object_t<
     sdbusplus::xyz::openbmc_project::Ipmi::server::SessionInfo>;
 
 class Session : public SessionIface
@@ -114,7 +115,7 @@ class Session : public SessionIface
      * @param[in] inRemoteConsoleSessID - Remote Console Session ID
      * @param[in] priv - Privilege Level requested in the Command
      */
-    Session(sdbusplus::bus::bus& bus, const char* path,
+    Session(sdbusplus::bus_t& bus, const char* path,
             SessionID inRemoteConsoleSessID, SessionID BMCSessionID,
             char priv) :
         SessionIface(bus, path)
