@@ -146,9 +146,8 @@ void Context::processInboundPayload(uint8_t seqNum, uint8_t ackSeqNum,
     if (isBreak && seqNum)
     {
         log<level::INFO>("Writing break to console socket descriptor");
-        constexpr uint8_t sysrqValue = 72; // use this to notify sol server
-        const std::vector<uint8_t> test{sysrqValue};
-        auto ret = sol::Manager::get().writeConsoleSocket(test, isBreak);
+        const std::vector<uint8_t> breakSeq{'~', 'B'}; // notify sol server
+        auto ret = sol::Manager::get().writeConsoleSocket(breakSeq);
         if (ret)
         {
             log<level::ERR>("Writing to console socket descriptor failed");
@@ -159,7 +158,7 @@ void Context::processInboundPayload(uint8_t seqNum, uint8_t ackSeqNum,
     // Write character data to the Host Console
     if (!input.empty() && seqNum)
     {
-        auto rc = sol::Manager::get().writeConsoleSocket(input, isBreak);
+        auto rc = sol::Manager::get().writeConsoleSocket(input);
         if (rc)
         {
             log<level::ERR>("Writing to console socket descriptor failed");
