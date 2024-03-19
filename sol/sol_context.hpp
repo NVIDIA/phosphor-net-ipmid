@@ -248,7 +248,8 @@ class Context : public std::enable_shared_from_this<Context>
      *  @param[in] seqNum - Packet sequence number.
      *  @param[in] ackSeqNum - Packet ACK/NACK sequence number.
      *  @param[in] count - Accepted character count.
-     *  @param[in] operation - ACK is false, NACK is true
+     *  @param[in] status - ACK is false, NACK is true.
+     *  @param[in] isBreak - It is true for break signal, otherwise false.
      *  @param[in] input - Incoming SOL character data.
      */
     void processInboundPayload(uint8_t seqNum, uint8_t ackSeqNum, uint8_t count,
