@@ -40,18 +40,38 @@ void Context::enableAccumulateTimer(bool enable)
 {
     // fetch the timeout from the SOL manager
     std::chrono::microseconds interval = sol::Manager::get().accumulateInterval;
+
     if (enable)
     {
+        auto bufferSize = sol::Manager::get().dataBuffer.size();
+        if (bufferSize > sendThreshold)
+        {
+            try
+            {
+                int rc = sendOutboundPayload();
+                if (rc == 0)
+                {
+                    return;
+                }
+            }
+            catch (const std::exception& e)
+            {
+                lg2::error(
+                    "Failed to call the sendOutboundPayload method: {ERROR}",
+                    "ERROR", e);
+                return;
+            }
+        }
         accumulateTimer.expires_after(interval);
         std::weak_ptr<Context> weakRef = weak_from_this();
         accumulateTimer.async_wait(
             [weakRef](const boost::system::error_code& ec) {
-                std::shared_ptr<Context> self = weakRef.lock();
-                if (!ec && self)
-                {
-                    self->charAccTimerHandler();
-                }
-            });
+            std::shared_ptr<Context> self = weakRef.lock();
+            if (!ec && self)
+            {
+                self->charAccTimerHandler();
+            }
+        });
     }
     else
     {
@@ -236,7 +256,6 @@ int Context::sendOutboundPayload()
 {
     if (payloadCache.size() != 0)
     {
-        enableAccumulateTimer(true);
         return -1;
     }
 

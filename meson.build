@@ -1,11 +1,11 @@
 project(
     'phosphor-net-ipmid', 'cpp',
     version : '1.0.0',
-    meson_version: '>=0.58.0',
+    meson_version: '>=1.1.1',
     default_options: [
         'warning_level=3',
         'werror=true',
-        'cpp_std=c++20',
+        'cpp_std=c++23',
         'buildtype=debugoptimized',
     ]
 )
@@ -26,10 +26,15 @@ libcrypto_dep = dependency('libcrypto')
 ipmid_dep = dependency('libipmid')
 userlayer_dep = dependency('libuserlayer')
 channellayer_dep = dependency('libchannellayer')
-mapper = dependency('libmapper')
 
 # Project Arguments
 cpp = meson.get_compiler('cpp')
+if cpp.has_header('CLI/CLI.hpp')
+    cli11_dep = declare_dependency()
+else
+    cli11_dep = dependency('CLI11')
+endif
+
 add_project_arguments(
   cpp.get_supported_arguments([
     '-DBOOST_ERROR_CODE_HEADER_ONLY',
@@ -41,6 +46,7 @@ add_project_arguments(
   language : 'cpp')
 
 deps = [
+    cli11_dep,
     ipmid_dep,
     userlayer_dep,
     channellayer_dep,
@@ -49,7 +55,6 @@ deps = [
     phosphor_dbus_interfaces_dep,
     phosphor_logging_dep,
     sdbusplus_dep,
-    mapper,
 ]
 
 sources = [
