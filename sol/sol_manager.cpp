@@ -73,9 +73,23 @@ int Manager::writeConsoleSocket(const std::vector<uint8_t>& input) const
 {
     boost::system::error_code ec;
 
-    consoleSocket->send(boost::asio::buffer(input), 0, ec);
+    // Perform the send operation
+    size_t bytesSent = consoleSocket->send(boost::asio::buffer(input), 0, ec);
 
-    return ec.value();
+    // Check if the send operation was successful
+    if (ec)
+    {
+        // Log the error and return the error code
+        lg2::error("Sending data to host console socket failed: {ERROR}",
+                   "ERROR", ec.value());
+
+        return ec.value();
+    }
+
+    lg2::info("Successfully sent {BYTES} bytes to host console socket", "BYTES",
+              bytesSent);
+
+    return 0;
 }
 
 void Manager::startHostConsole()

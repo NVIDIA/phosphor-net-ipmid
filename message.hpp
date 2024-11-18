@@ -102,7 +102,13 @@ using Response = Request;
  */
 static inline uint8_t crc8bit(const uint8_t* ptr, const size_t len)
 {
-    return (0x100 - std::accumulate(ptr, ptr + len, 0));
+    // Calculate the sum of the bytes
+    uint16_t sum = std::accumulate(ptr, ptr + len, 0);
+
+    // Calculate checksum as (256 - sum) % 256
+    uint8_t checksum = static_cast<uint8_t>((256 - (sum % 256)) % 256);
+
+    return checksum;
 }
 
 /**
@@ -119,10 +125,12 @@ struct Message
     static constexpr uint32_t MESSAGE_INVALID_SESSION_ID = 0xBADBADFF;
 
     Message() :
+        isPacketEncrypted(false), isPacketAuthenticated(false),
         payloadType(PayloadType::INVALID),
         rcSessionID(Message::MESSAGE_INVALID_SESSION_ID),
         bmcSessionID(Message::MESSAGE_INVALID_SESSION_ID),
-        rmcpMsgClass(ClassOfMsg::RESERVED)
+
+        sessionSeqNum(0), rmcpMsgClass(ClassOfMsg::RESERVED)
     {}
 
     /**
@@ -138,7 +146,8 @@ struct Message
         isPacketEncrypted(other.isPacketEncrypted),
         isPacketAuthenticated(other.isPacketAuthenticated),
         payloadType(other.payloadType), rcSessionID(other.rcSessionID),
-        bmcSessionID(other.bmcSessionID), rmcpMsgClass(other.rmcpMsgClass)
+        bmcSessionID(other.bmcSessionID), sessionSeqNum(other.sessionSeqNum),
+        rmcpMsgClass(other.rmcpMsgClass)
     {
         // special behavior for rmcp+ session creation
         if (PayloadType::OPEN_SESSION_REQUEST == other.payloadType)

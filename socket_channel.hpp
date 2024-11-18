@@ -42,8 +42,11 @@ class Channel
      * @return None
      */
     explicit Channel(std::shared_ptr<boost::asio::ip::udp::socket> socket) :
-        socket(socket)
-    {}
+        socket(std::move(socket))
+    {
+        remoteSockAddr = {};
+        sockAddrSize = sizeof(sockaddr_storage);
+    }
     /**
      * @brief Check if ip address is ipv4 mapped ipv6
      *

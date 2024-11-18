@@ -216,10 +216,21 @@ int EventLoop::setupSocket(std::shared_ptr<sdbusplus::asio::connection>& bus,
     // cannot be constexpr because it gets passed by address
     const int option_enabled = 1;
     // common socket stuff; set options to get packet info (DST addr)
-    ::setsockopt(udpSocket->native_handle(), IPPROTO_IP, IP_PKTINFO,
-                 &option_enabled, sizeof(option_enabled));
-    ::setsockopt(udpSocket->native_handle(), IPPROTO_IPV6, IPV6_RECVPKTINFO,
-                 &option_enabled, sizeof(option_enabled));
+    if (::setsockopt(udpSocket->native_handle(), IPPROTO_IP, IP_PKTINFO,
+                     &option_enabled, sizeof(option_enabled)) == -1)
+    {
+        lg2::error("Failed to set IP_PKTINFO option: {ERROR}", "ERROR",
+                   strerror(errno));
+        return EXIT_FAILURE;
+    }
+
+    if (::setsockopt(udpSocket->native_handle(), IPPROTO_IPV6, IPV6_RECVPKTINFO,
+                     &option_enabled, sizeof(option_enabled)) == -1)
+    {
+        lg2::error("Failed to set IPV6_RECVPKTINFO option: {ERROR}", "ERROR",
+                   strerror(errno));
+        return EXIT_FAILURE;
+    }
 
     // set the dbus name
     std::string busName = "xyz.openbmc_project.Ipmi.Channel." + channel;

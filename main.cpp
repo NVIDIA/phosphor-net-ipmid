@@ -72,50 +72,89 @@ EInterfaceIndex getInterfaceIndex(void)
 
 int main(int argc, char* argv[])
 {
-    CLI::App app("KCS RMCP+ bridge");
-    std::string channel;
-    app.add_option("-c,--channel", channel, "channel name. e.g., eth0");
-    uint16_t port = ipmi::rmcpp::defaultPort;
-    app.add_option("-p,--port", port, "port number");
-    bool verbose = false;
-    app.add_option("-v,--verbose", verbose, "print more verbose output");
-    CLI11_PARSE(app, argc, argv);
-
-    // Connect to system bus
-    auto rc = sd_bus_default_system(&bus);
-    if (rc < 0)
+    try
     {
-        lg2::error("Failed to connect to system bus: {ERROR}", "ERROR",
-                   strerror(-rc));
-        return rc;
+        CLI::App app("KCS RMCP+ bridge");
+        std::string channel;
+        app.add_option("-c,--channel", channel, "channel name. e.g., eth0");
+        uint16_t port = ipmi::rmcpp::defaultPort;
+        app.add_option("-p,--port", port, "port number");
+        bool verbose = false;
+        app.add_option("-v,--verbose", verbose, "print more verbose output");
+        CLI11_PARSE(app, argc, argv);
+
+        // Connect to system bus
+        auto rc = sd_bus_default_system(&bus);
+        if (rc < 0)
+        {
+            lg2::error("Failed to connect to system bus: {ERROR}", "ERROR",
+                       strerror(-rc));
+            return rc;
+        }
+        sdbusp = std::make_shared<sdbusplus::asio::connection>(*io, bus);
+
+        ipmi::ipmiChannelInit();
+        if (channel.size())
+        {
+            setInterfaceIndex(channel);
+        }
+
+        session::Manager::get().managerInit(channel);
+        // Register callback to update cache for a GUID change and cache the
+        // GUID
+        command::registerGUIDChangeCallback();
+
+        // Register callback to update cache for sol conf change
+        sol::registerSolConfChangeCallbackHandler(channel);
+
+        // Register the phosphor-net-ipmid session setup commands
+        command::sessionSetupCommands();
+
+        // Register the phosphor-net-ipmid SOL commands
+        sol::command::registerCommands();
+
+        auto& loop = eventloop::EventLoop::get();
+        if (loop.setupSocket(sdbusp, channel))
+        {
+            return EXIT_FAILURE;
+        }
+
+        // Start Event Loop
+        return loop.startEventLoop();
     }
-    sdbusp = std::make_shared<sdbusplus::asio::connection>(*io, bus);
-
-    ipmi::ipmiChannelInit();
-    if (channel.size())
+    catch (const boost::system::system_error& e)
     {
-        setInterfaceIndex(channel);
-    }
-
-    session::Manager::get().managerInit(channel);
-    // Register callback to update cache for a GUID change and cache the GUID
-    command::registerGUIDChangeCallback();
-
-    // Register callback to update cache for sol conf change
-    sol::registerSolConfChangeCallbackHandler(channel);
-
-    // Register the phosphor-net-ipmid session setup commands
-    command::sessionSetupCommands();
-
-    // Register the phosphor-net-ipmid SOL commands
-    sol::command::registerCommands();
-
-    auto& loop = eventloop::EventLoop::get();
-    if (loop.setupSocket(sdbusp, channel))
-    {
+        lg2::error("Boost system error: {ERROR}", "ERROR", e.what());
         return EXIT_FAILURE;
     }
-
-    // Start Event Loop
-    return loop.startEventLoop();
+    catch (const CLI::BadNameString& e)
+    {
+        lg2::error("CLI error: {ERROR}", "ERROR", e.what());
+        return EXIT_FAILURE;
+    }
+    catch (const std::runtime_error& e)
+    {
+        lg2::error("Runtime error: {ERROR}", "ERROR", e.what());
+        return EXIT_FAILURE;
+    }
+    catch (const boost::asio::execution::bad_executor& e)
+    {
+        lg2::error("Boost ASIO bad executor error: {ERROR}", "ERROR", e.what());
+        return EXIT_FAILURE;
+    }
+    catch (const std::bad_alloc& e)
+    {
+        lg2::error("Memory allocation failed: {ERROR}", "ERROR", e.what());
+        return EXIT_FAILURE;
+    }
+    catch (const std::exception& e)
+    {
+        lg2::error("Unhandled exception: {ERROR}", "ERROR", e.what());
+        return EXIT_FAILURE;
+    }
+    catch (...)
+    {
+        lg2::error("Unknown exception caught in main");
+        return EXIT_FAILURE;
+    }
 }
