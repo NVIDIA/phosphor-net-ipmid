@@ -81,8 +81,8 @@ struct BasicHeader_t
  *         header type. In case of failure nullptr and session header type
  *         would be invalid.
  */
-std::tuple<std::shared_ptr<Message>, SessionHeader>
-    unflatten(std::vector<uint8_t>& inPacket);
+std::tuple<std::shared_ptr<Message>, SessionHeader> unflatten(
+    std::vector<uint8_t>& inPacket);
 
 /**
  * @brief Flatten an IPMI message and generate the IPMI packet with the
@@ -234,10 +234,9 @@ void addIntegrityData(std::vector<uint8_t>& packet,
  *
  * @return on successful completion, return the plain text payload
  */
-std::vector<uint8_t>
-    decryptPayload(const std::vector<uint8_t>& packet,
-                   const std::shared_ptr<Message>& message, size_t payloadLen,
-                   const std::shared_ptr<session::Session>& session);
+std::vector<uint8_t> decryptPayload(
+    const std::vector<uint8_t>& packet, const std::shared_ptr<Message>& message,
+    size_t payloadLen, const std::shared_ptr<session::Session>& session);
 
 /**
  * @brief Encrypt the plain text payload for the outgoing IPMI packet
@@ -247,9 +246,9 @@ std::vector<uint8_t>
  *
  * @return on successful completion, return the encrypted payload
  */
-std::vector<uint8_t>
-    encryptPayload(const std::shared_ptr<Message>& message,
-                   const std::shared_ptr<session::Session>& session);
+std::vector<uint8_t> encryptPayload(
+    const std::shared_ptr<Message>& message,
+    const std::shared_ptr<session::Session>& session);
 
 } // namespace internal
 

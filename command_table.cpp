@@ -77,27 +77,27 @@ void Table::executeCommand(uint32_t inCommand,
              ipmi::Value(static_cast<uint32_t>(session->getBMCSessionID()))},
         };
         bus->async_method_call(
-            [handler, this](const boost::system::error_code& ec,
-                            const IpmiDbusRspType& response) {
-            if (!ec)
-            {
-                const uint8_t& cc = std::get<3>(response);
-                const std::vector<uint8_t>& responseData =
-                    std::get<4>(response);
-                std::vector<uint8_t> payload;
-                payload.reserve(1 + responseData.size());
-                payload.push_back(cc);
-                payload.insert(payload.end(), responseData.begin(),
-                               responseData.end());
-                handler->outPayload = std::move(payload);
-            }
-            else
-            {
-                std::vector<uint8_t> payload;
-                payload.push_back(IPMI_CC_UNSPECIFIED_ERROR);
-                handler->outPayload = std::move(payload);
-            }
-        },
+            [handler](const boost::system::error_code& ec,
+                      const IpmiDbusRspType& response) {
+                if (!ec)
+                {
+                    const uint8_t& cc = std::get<3>(response);
+                    const std::vector<uint8_t>& responseData =
+                        std::get<4>(response);
+                    std::vector<uint8_t> payload;
+                    payload.reserve(1 + responseData.size());
+                    payload.push_back(cc);
+                    payload.insert(payload.end(), responseData.begin(),
+                                   responseData.end());
+                    handler->outPayload = std::move(payload);
+                }
+                else
+                {
+                    std::vector<uint8_t> payload;
+                    payload.push_back(IPMI_CC_UNSPECIFIED_ERROR);
+                    handler->outPayload = std::move(payload);
+                }
+            },
             "xyz.openbmc_project.Ipmi.Host", "/xyz/openbmc_project/Ipmi",
             "xyz.openbmc_project.Ipmi.Server", "execute", netFn, lun, cmd,
             commandData, options);
@@ -119,8 +119,8 @@ void Table::executeCommand(uint32_t inCommand,
             }
         }
 
-        handler->outPayload = iterator->second->executeCommand(commandData,
-                                                               handler);
+        handler->outPayload =
+            iterator->second->executeCommand(commandData, handler);
 
         auto end = std::chrono::steady_clock::now();
 
@@ -137,9 +137,9 @@ void Table::executeCommand(uint32_t inCommand,
     }
 }
 
-std::vector<uint8_t>
-    NetIpmidEntry::executeCommand(std::vector<uint8_t>& commandData,
-                                  std::shared_ptr<message::Handler> handler)
+std::vector<uint8_t> NetIpmidEntry::executeCommand(
+    std::vector<uint8_t>& commandData,
+    std::shared_ptr<message::Handler> handler)
 {
     std::vector<uint8_t> errResponse;
 

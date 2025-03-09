@@ -53,8 +53,8 @@ bool AlgoSHA1::verifyIntegrityData(
                        integrityDataEnd));
 }
 
-std::vector<uint8_t>
-    AlgoSHA1::generateIntegrityData(const std::vector<uint8_t>& packet) const
+std::vector<uint8_t> AlgoSHA1::generateIntegrityData(
+    const std::vector<uint8_t>& packet) const
 {
     return generateHMAC(
         packet.data() + message::parser::RMCP_SESSION_HEADER_SIZE,
@@ -119,8 +119,8 @@ bool AlgoSHA256::verifyIntegrityData(
                        integrityDataEnd));
 }
 
-std::vector<uint8_t>
-    AlgoSHA256::generateIntegrityData(const std::vector<uint8_t>& packet) const
+std::vector<uint8_t> AlgoSHA256::generateIntegrityData(
+    const std::vector<uint8_t>& packet) const
 {
     return generateHMAC(
         packet.data() + message::parser::RMCP_SESSION_HEADER_SIZE,

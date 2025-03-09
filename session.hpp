@@ -99,12 +99,12 @@ using SessionIface = sdbusplus::server::object_t<
 class Session : public SessionIface
 {
   public:
-    Session() = default;
+    Session() = delete;
     ~Session() = default;
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
-    Session(Session&&) = default;
-    Session& operator=(Session&&) = default;
+    Session(Session&&) = delete;
+    Session& operator=(Session&&) = delete;
 
     /**
      * @brief Session Constructor
@@ -117,8 +117,7 @@ class Session : public SessionIface
      */
     Session(sdbusplus::bus_t& bus, const char* path,
             SessionID inRemoteConsoleSessID, SessionID BMCSessionID,
-            char priv) :
-        SessionIface(bus, path)
+            char priv) : SessionIface(bus, path)
     {
         reqMaxPrivLevel = static_cast<session::Privilege>(priv);
         bmcSessionID = BMCSessionID;
@@ -248,8 +247,8 @@ class Session : public SessionIface
     {
         auto currentTime = std::chrono::steady_clock::now();
         auto elapsedMicros =
-            std::chrono::duration_cast<std::chrono::microseconds>(currentTime -
-                                                                  lastTime);
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                currentTime - lastTime);
 
         State state = static_cast<session::State>(this->state());
 

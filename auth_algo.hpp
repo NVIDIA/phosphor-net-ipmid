@@ -15,7 +15,6 @@ namespace rakp_auth
 constexpr size_t USER_KEY_MAX_LENGTH = 20;
 constexpr size_t BMC_RANDOM_NUMBER_LEN = 16;
 constexpr size_t REMOTE_CONSOLE_RANDOM_NUMBER_LEN = 16;
-extern const std::string userName;
 
 /**
  * @enum RAKP Authentication Algorithms
@@ -52,8 +51,7 @@ class Interface
   public:
     explicit Interface(integrity::Algorithms intAlgo,
                        crypt::Algorithms cryptAlgo) :
-        intAlgo(intAlgo),
-        cryptAlgo(cryptAlgo)
+        intAlgo(intAlgo), cryptAlgo(cryptAlgo)
     {}
 
     Interface() = delete;
@@ -175,11 +173,11 @@ class AlgoSHA1 : public Interface
     AlgoSHA1(AlgoSHA1&&) = default;
     AlgoSHA1& operator=(AlgoSHA1&&) = default;
 
-    std::vector<uint8_t>
-        generateHMAC(const std::vector<uint8_t>& input) const override;
+    std::vector<uint8_t> generateHMAC(
+        const std::vector<uint8_t>& input) const override;
 
-    std::vector<uint8_t>
-        generateICV(const std::vector<uint8_t>& input) const override;
+    std::vector<uint8_t> generateICV(
+        const std::vector<uint8_t>& input) const override;
 };
 
 /**
@@ -209,11 +207,11 @@ class AlgoSHA256 : public Interface
     AlgoSHA256(AlgoSHA256&&) = default;
     AlgoSHA256& operator=(AlgoSHA256&&) = default;
 
-    std::vector<uint8_t>
-        generateHMAC(const std::vector<uint8_t>& input) const override;
+    std::vector<uint8_t> generateHMAC(
+        const std::vector<uint8_t>& input) const override;
 
-    std::vector<uint8_t>
-        generateICV(const std::vector<uint8_t>& input) const override;
+    std::vector<uint8_t> generateICV(
+        const std::vector<uint8_t>& input) const override;
 };
 
 } // namespace rakp_auth

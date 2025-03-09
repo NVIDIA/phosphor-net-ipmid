@@ -12,7 +12,6 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <phosphor-logging/lg2.hpp>
-#include <sdbusplus/asio/sd_event.hpp>
 #include <user_channel/channel_layer.hpp>
 
 namespace eventloop
@@ -37,14 +36,15 @@ void EventLoop::handleRmcpPacket()
 
 void EventLoop::startRmcpReceive()
 {
-    udpSocket->async_wait(boost::asio::socket_base::wait_read,
-                          [this](const boost::system::error_code& ec) {
-        if (!ec)
-        {
-            boost::asio::post(*io, [this]() { startRmcpReceive(); });
-            handleRmcpPacket();
-        }
-    });
+    udpSocket->async_wait(
+        boost::asio::socket_base::wait_read,
+        [this](const boost::system::error_code& ec) {
+            if (!ec)
+            {
+                boost::asio::post(*io, [this]() { startRmcpReceive(); });
+                handleRmcpPacket();
+            }
+        });
 }
 
 int EventLoop::getVLANID(const std::string channel)
@@ -204,8 +204,8 @@ int EventLoop::setupSocket(std::shared_ptr<sdbusplus::asio::connection>& bus,
     {
         // SO_BINDTODEVICE
         if ((::setsockopt(udpSocket->native_handle(), SOL_SOCKET,
-                          SO_BINDTODEVICE, iface.c_str(),
-                          iface.size() + 1) == -1))
+                          SO_BINDTODEVICE, iface.c_str(), iface.size() + 1) ==
+             -1))
         {
             lg2::error("Failed to bind to requested interface: {ERROR}",
                        "ERROR", strerror(errno));
@@ -238,20 +238,25 @@ int EventLoop::setupSocket(std::shared_ptr<sdbusplus::asio::connection>& bus,
 
 int EventLoop::startEventLoop()
 {
-    // set up boost::asio signal handling
-    boost::asio::signal_set signals(*io, SIGINT, SIGTERM);
-    signals.async_wait([this](const boost::system::error_code& /* error */,
-                              int /* signalNumber */) {
-        udpSocket->cancel();
-        udpSocket->close();
-        io->stop();
-    });
-
     startRmcpReceive();
 
     io->run();
 
     return EXIT_SUCCESS;
+}
+
+void EventLoop::setupSignal()
+{
+    static boost::asio::signal_set signals(*io, SIGINT, SIGTERM);
+    signals.async_wait([this](const boost::system::error_code& /* error */,
+                              int /* signalNumber */) {
+        if (udpSocket)
+        {
+            udpSocket->cancel();
+            udpSocket->close();
+        }
+        io->stop();
+    });
 }
 
 } // namespace eventloop
