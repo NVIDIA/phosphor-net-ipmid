@@ -3,6 +3,7 @@
 #include "comm_module.hpp"
 #include "endian.hpp"
 #include "guid.hpp"
+#include "rakp12.hpp"
 #include "rmcp.hpp"
 #include "sessions_manager.hpp"
 
@@ -173,6 +174,19 @@ std::vector<uint8_t> RAKP34(const std::vector<uint8_t>& inPayload,
         return outPayload;
     }
 
+    uint8_t userId = ipmi::ipmiUserGetUserId(session->userName);
+    if (!session::Manager::get().handleRAKP34(
+            userId, session->getBMCSessionID(), session->userName))
+    {
+        response->rmcpStatusCode =
+            static_cast<uint8_t>(RAKP_ReturnCode::INVALID_INTEGRITY_VALUE);
+        response->reserved = 0;
+        std::string message =
+            "Authentication failed - user already locked out ";
+        logInvalidLoginRedfishEvent(message);
+        return outPayload;
+    }
+
     /*
      * Session Integrity Key
      *
@@ -267,6 +281,7 @@ std::vector<uint8_t> RAKP34(const std::vector<uint8_t>& inPayload,
     applyCryptAlgo(session->getBMCSessionID());
 
     session->state(static_cast<uint8_t>(session::State::active));
+
     return outPayload;
 }
 

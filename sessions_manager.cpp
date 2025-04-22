@@ -259,11 +259,30 @@ void Manager::cleanStaleEntries()
         }
         if (!(session->isSessionActive(activeGrace, setupGrace)))
         {
-            lg2::info(
-                "Removing idle IPMI LAN session, id: {ID}, handler: {HANDLE}",
-                "ID", session->getBMCSessionID(), "HANDLE",
-                getSessionHandle(session->getBMCSessionID()));
+            const std::string& userName = session->userName;
+            lg2::info("Removing idle IPMI LAN session, user: {USERNAME}, "
+                      "id: {ID}, handler: {HANDLE}",
+                      "USERNAME", userName, "ID", session->getBMCSessionID(),
+                      "HANDLE", getSessionHandle(session->getBMCSessionID()));
             sessionHandleMap[getSessionHandle(session->getBMCSessionID())] = 0;
+
+            // Check if the session is in setupInProgress state
+            State state = static_cast<session::State>(session->state());
+            if (state == State::setupInProgress)
+            {
+                uint8_t userId = ipmi::ipmiUserGetUserId(userName);
+                auto& userData = userSessionMap[userId];
+                // Check if the sessionId is already in the userData
+                auto it = std::find(userData.begin(), userData.end(),
+                                    session->getBMCSessionID());
+                if (it != userData.end())
+                {
+#ifdef PAM_AUTHENTICATE
+                    ipmi::ipmiUserPamAuthenticate(userName, "");
+#endif
+                    userData.erase(it);
+                }
+            }
             iter = sessionsMap.erase(iter);
         }
         else
@@ -342,6 +361,60 @@ void Manager::scheduleSessionCleaner(const std::chrono::microseconds& when)
             cleanStaleEntries();
         }
     });
+}
+
+bool Manager::handleRAKP12(uint8_t userId, uint32_t sessionId)
+{
+    // lg2::error(
+    //    "handleRAKP12, userId {USER_ID}, sessionId {SESSION_ID}, userName
+    //    {USER_NAME}", "USER_ID", static_cast<int>(userId), "SESSION_ID",
+    //    sessionId, "USER_NAME", userName);
+
+    // Add sessionId to userData
+    auto& userData = userSessionMap[userId];
+    userData.push_back(sessionId);
+
+    return true;
+}
+
+bool Manager::handleRAKP34(uint8_t userId, uint32_t sessionId,
+                           [[maybe_unused]] const std::string& userName)
+{
+    // lg2::error(
+    //     "handleRAKP34, userId {USER_ID}, sessionId {SESSION_ID}, userName
+    //     {USER_NAME}", "USER_ID", static_cast<int>(userId), "SESSION_ID",
+    //     sessionId, "USER_NAME", userName);
+
+    auto& userData = userSessionMap[userId];
+    for (auto it = userData.begin(); it != userData.end();)
+    {
+        // Check if the sessionId is already in the userData
+        if (*it == sessionId)
+        {
+#ifdef PAM_AUTHENTICATE
+            // Check whether user is already locked for failed attempts
+            ipmi::SecureString passwd = ipmi::ipmiUserGetPassword(userName);
+            if (!ipmi::ipmiUserPamAuthenticate(userName, passwd))
+            {
+                // too many pre-active sessions in flight
+                lg2::error(
+                    "Authentication failed - user already locked out, user: {USERNAME}, passwd: {PASSWD}",
+                    "USERNAME", userName, "PASSWD", passwd);
+                return false;
+            }
+#endif
+            // Remove current session
+            userData.erase(it);
+            // lg2::error(
+            //     "Session completed and removed for user {USER_NAME}, session
+            //     {SESSION_ID}", "USER_NAME", userName, "SESSION_ID",
+            //     sessionId, "USER_ID", static_cast<int>(userId));
+            break;
+        }
+        ++it;
+    }
+
+    return true;
 }
 
 } // namespace session

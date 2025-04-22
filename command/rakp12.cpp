@@ -180,6 +180,7 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
     std::string userName(request->user_name, request->user_name_len);
     ipmi::SecureString passwd;
     uint8_t userId = ipmi::ipmiUserGetUserId(userName);
+
     if (userId == ipmi::invalidUserId)
     {
         response->rmcpStatusCode =
@@ -206,20 +207,15 @@ std::vector<uint8_t> RAKP12(const std::vector<uint8_t>& inPayload,
         logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
-#ifdef PAM_AUTHENTICATE
-    // Check whether user is already locked for failed attempts
-    if (!ipmi::ipmiUserPamAuthenticate(userName, passwd))
+    if (!session::Manager::get().handleRAKP12(userId,
+                                              session->getBMCSessionID()))
     {
-        lg2::error(
-            "Authentication failed - user already locked out, user id: {ID}",
-            "ID", userId);
-
+        // too many pre-active sessions in flight
         response->rmcpStatusCode =
             static_cast<uint8_t>(RAKP_ReturnCode::UNAUTH_NAME);
         logInvalidLoginRedfishEvent(message);
         return outPayload;
     }
-#endif
 
     uint8_t chNum = static_cast<uint8_t>(getInterfaceIndex());
     // Get channel based access information
