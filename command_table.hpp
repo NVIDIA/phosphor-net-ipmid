@@ -4,12 +4,18 @@
 
 #include <ipmid/api.h>
 
+#include <chrono>
 #include <cstddef>
+#include <ctime>
 #include <functional>
+#include <iomanip>
 #include <map>
 
 namespace command
 {
+
+constexpr size_t maxTokens = 100;
+constexpr size_t refillTime = 1000;
 
 struct CommandID
 {
@@ -200,6 +206,51 @@ class NetIpmidEntry final : public Entry
     bool sessionless;
 };
 
+class RateLimiter
+{
+  public:
+    RateLimiter(size_t maxTokens, std::chrono::milliseconds refillTime) :
+        maxTokens(maxTokens), currentTokens(maxTokens), refillTime(refillTime),
+        lastRefillTime(std::chrono::steady_clock::now())
+    {}
+
+    bool acquireToken()
+    {
+        refillTokens();
+
+        if (currentTokens > 0)
+        {
+            currentTokens--;
+            return true;
+        }
+        return false;
+    }
+
+  private:
+    void refillTokens()
+    {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - lastRefillTime);
+
+        size_t tokensToAdd = (elapsed.count() * maxTokens) / refillTime.count();
+        lg2::debug(
+            "RateLimiter: time:{TIME} , tokensToAdd: {TOKENS}, currentTokens: {CURRENT}",
+            "TIME", elapsed.count(), "TOKENS", tokensToAdd, "CURRENT",
+            currentTokens);
+        if (tokensToAdd)
+        {
+            currentTokens = std::min(maxTokens, currentTokens + tokensToAdd);
+            lastRefillTime = now;
+        }
+    }
+
+    const size_t maxTokens;
+    size_t currentTokens;
+    const std::chrono::milliseconds refillTime;
+    std::chrono::steady_clock::time_point lastRefillTime;
+};
+
 /**
  * @class Table
  *
@@ -268,6 +319,9 @@ class Table
      */
     void executeCommand(uint32_t inCommand, std::vector<uint8_t>& commandData,
                         std::shared_ptr<message::Handler> handler);
+
+    RateLimiter dbusRateLimiter{maxTokens,
+                                std::chrono::milliseconds(refillTime)};
 
   private:
     CommandTable commandTable;

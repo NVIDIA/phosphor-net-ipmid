@@ -76,6 +76,19 @@ void Table::executeCommand(uint32_t inCommand,
             {"currentSessionId",
              ipmi::Value(static_cast<uint32_t>(session->getBMCSessionID()))},
         };
+
+        // Apply rate limiting for D-Bus calls
+        if (!dbusRateLimiter.acquireToken())
+        {
+            lg2::warning(
+                "D-Bus call rate limit exceeded, command dropped: netFn: {NETFN}, cmd: {CMD}",
+                "NETFN", netFn, "CMD", cmd);
+            std::vector<uint8_t> payload;
+            payload.push_back(IPMI_CC_BUSY);
+            handler->outPayload = std::move(payload);
+            return;
+        }
+
         bus->async_method_call(
             [handler](const boost::system::error_code& ec,
                       const IpmiDbusRspType& response) {
