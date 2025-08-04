@@ -13,3 +13,24 @@ option(
     value: 'enabled',
     description: 'Enable Pam Authenticate',
 )
+
+option(
+    'max_tokens',
+    type: 'integer',
+    value: 70,
+    description: 'Maximum number of IPMI commands that can be executed per second (rate limit)',
+)
+
+option(
+    'refill_time',
+    type: 'integer',
+    value: 1000,
+    description: 'Token bucket refill interval in milliseconds',
+)
+
+option(
+    'rate_limiter',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Enable IPMI command rate limiter',
+)

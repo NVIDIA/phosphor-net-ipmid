@@ -1,9 +1,13 @@
 #pragma once
+#include "config.h"
 
 #include "message_handler.hpp"
 
 #include <ipmid/api.h>
 
+#include <phosphor-logging/lg2.hpp>
+
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <ctime>
@@ -14,8 +18,8 @@
 namespace command
 {
 
-constexpr size_t maxTokens = 100;
-constexpr size_t refillTime = 1000;
+constexpr size_t maxTokens = MAX_TOKENS;
+constexpr size_t refillTime = REFILL_TIME;
 
 struct CommandID
 {
@@ -272,8 +276,8 @@ class Table
     // move assignment is deleted
     Table(const Table&) = delete;
     Table& operator=(const Table&) = delete;
-    Table(Table&&) = default;
-    Table& operator=(Table&&) = default;
+    Table(Table&&) = delete;
+    Table& operator=(Table&&) = delete;
 
     /**
      * @brief Get a reference to the singleton Table
@@ -320,10 +324,9 @@ class Table
     void executeCommand(uint32_t inCommand, std::vector<uint8_t>& commandData,
                         std::shared_ptr<message::Handler> handler);
 
+  private:
     RateLimiter dbusRateLimiter{maxTokens,
                                 std::chrono::milliseconds(refillTime)};
-
-  private:
     CommandTable commandTable;
 };
 

@@ -15,6 +15,9 @@ project(
 conf_data = configuration_data()
 conf_data.set('RMCP_PING', get_option('rmcp_ping').allowed())
 conf_data.set('PAM_AUTHENTICATE', get_option('pam_authenticate').allowed())
+conf_data.set('MAX_TOKENS', get_option('max_tokens'))
+conf_data.set('REFILL_TIME', get_option('refill_time'))
+conf_data.set('RATE_LIMITER', get_option('rate_limiter').enabled())
 
 configure_file(output: 'config.h', configuration: conf_data)
 

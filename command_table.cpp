@@ -77,6 +77,7 @@ void Table::executeCommand(uint32_t inCommand,
              ipmi::Value(static_cast<uint32_t>(session->getBMCSessionID()))},
         };
 
+#ifdef RATE_LIMITER
         // Apply rate limiting for D-Bus calls
         if (!dbusRateLimiter.acquireToken())
         {
@@ -88,6 +89,7 @@ void Table::executeCommand(uint32_t inCommand,
             handler->outPayload = std::move(payload);
             return;
         }
+#endif
 
         bus->async_method_call(
             [handler](const boost::system::error_code& ec,
