@@ -1,5 +1,3 @@
-#include "config.h"
-
 #include "sessions_manager.hpp"
 
 #include "main.hpp"
