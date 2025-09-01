@@ -12,8 +12,6 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 namespace session
 {
@@ -131,10 +129,6 @@ class Manager
      */
     void scheduleSessionCleaner(const std::chrono::microseconds& grace);
 
-    bool handleRAKP12(uint8_t userId, uint32_t sessionId);
-    bool handleRAKP34(uint8_t userId, uint32_t sessionId,
-                      [[maybe_unused]] const std::string& userName);
-
   private:
     /**
      * @brief reclaim system resources by limiting idle sessions
@@ -168,8 +162,6 @@ class Manager
     std::string chName{}; // Channel Name
     uint8_t ipmiNetworkInstance = 0;
     void setNetworkInstance(void);
-
-    std::unordered_map<uint8_t, std::vector<uint32_t>> userSessionMap;
 };
 
 } // namespace session
