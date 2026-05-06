@@ -69,8 +69,7 @@ void Table::executeCommand(uint32_t inCommand,
         uint8_t cmd = command.cmd();
 
         std::map<std::string, ipmi::Value> options = {
-            {"userId", ipmi::Value(static_cast<int>(
-                           ipmi::ipmiUserGetUserId(session->userName)))},
+            {"userId", ipmi::Value(static_cast<int>(session->userID()))},
             {"privilege",
              ipmi::Value(static_cast<int>(session->currentPrivilege()))},
             {"currentSessionId",
