@@ -72,15 +72,25 @@ class Channel
      */
     std::string getRemoteAddress(uint32_t& remoteIpv4Addr) const
     {
-        const char* retval = nullptr;
+        // Copy into result while the local ipv4addr/ipv6addr buffers are
+        // still in scope. The previous form stored a `const char*` into
+        // `retval` and returned `std::string(retval)` AFTER the if/else
+        // branches closed - by that point the buffer pointed at was
+        // already out of scope, even though the std::string ctor would
+        // have copied at point-of-use (this was real UB, not just a
+        // Coverity false positive).
+        std::string result;
         if (sockAddrSize == sizeof(sockaddr_in))
         {
             char ipv4addr[INET_ADDRSTRLEN];
             const sockaddr_in* sa =
                 reinterpret_cast<const sockaddr_in*>(&remoteSockAddr);
             remoteIpv4Addr = sa->sin_addr.s_addr;
-            retval =
-                inet_ntop(AF_INET, &(sa->sin_addr), ipv4addr, sizeof(ipv4addr));
+            if (const char* p = inet_ntop(AF_INET, &(sa->sin_addr), ipv4addr,
+                                          sizeof(ipv4addr)))
+            {
+                result = p;
+            }
         }
         else if (sockAddrSize == sizeof(sockaddr_in6))
         {
@@ -94,16 +104,18 @@ class Channel
                             sizeof(remoteIpv4Addr),
                             reinterpret_cast<uint8_t*>(&remoteIpv4Addr));
             }
-            retval = inet_ntop(AF_INET6, &(sa->sin6_addr), ipv6addr,
-                               sizeof(ipv6addr));
+            if (const char* p = inet_ntop(AF_INET6, &(sa->sin6_addr), ipv6addr,
+                                          sizeof(ipv6addr)))
+            {
+                result = p;
+            }
         }
 
-        if (retval)
+        if (result.empty())
         {
-            return retval;
+            lg2::error("Error in inet_ntop: {ERROR}", "ERROR", strerror(errno));
         }
-        lg2::error("Error in inet_ntop: {ERROR}", "ERROR", strerror(errno));
-        return std::string();
+        return result;
     }
 
     /**

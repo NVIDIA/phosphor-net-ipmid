@@ -64,7 +64,7 @@ Handler::~Handler()
         else
 #endif // RMCP_PING
         {
-            if (outPayload)
+            if (outPayload && inMessage)
             {
                 std::shared_ptr<Message> outMessage =
                     inMessage->createResponse(*outPayload);
