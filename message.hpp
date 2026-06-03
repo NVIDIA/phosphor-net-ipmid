@@ -3,6 +3,7 @@
 #include "config.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <numeric>
 #include <vector>
