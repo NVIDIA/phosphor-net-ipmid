@@ -31,7 +31,13 @@ foreach t : tests
             t,
             test_sources,
             include_directories: ['..'],
-            dependencies: [gtest_dep, gmock_dep, libcrypto_dep],
+            dependencies: [
+                gmock_dep,
+                gtest_dep,
+                ipmid_dep,
+                libcrypto_dep,
+                phosphor_logging_dep,
+            ],
         ),
         workdir: meson.current_source_dir(),
     )
