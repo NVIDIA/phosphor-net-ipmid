@@ -258,7 +258,7 @@ struct Message
     uint32_t sessionSeqNum;     // Session Sequence Number
     ClassOfMsg rmcpMsgClass;    // Class of Message
 #ifdef RMCP_PING
-    uint8_t asfMsgTag;          // ASF Message Tag
+    uint8_t asfMsgTag = 0;      // ASF Message Tag
 #endif                          // RMCP_PING
 
     /** @brief Message payload
