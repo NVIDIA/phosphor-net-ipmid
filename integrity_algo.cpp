@@ -2,6 +2,7 @@
 
 #include "message_parsers.hpp"
 
+#include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
@@ -11,6 +12,50 @@ namespace cipher
 
 namespace integrity
 {
+
+namespace
+{
+
+/**
+ * @brief Constant-time comparison of a locally computed HMAC against the
+ *        AuthCode received from the network.
+ *
+ * The integrity check is the authentication gate for every post-session RMCP+
+ * command on a network-exposed service (UDP/623). A byte-by-byte comparison
+ * such as std::equal()/memcmp() returns as soon as it finds the first
+ * mismatching byte, so its execution time reveals how many leading bytes of the
+ * candidate AuthCode are correct. A network-adjacent attacker can exploit that
+ * timing oracle to reconstruct a valid HMAC one byte at a time and forge
+ * authenticated packets without knowing the session integrity key K1
+ * (CWE-208).
+ *
+ * CRYPTO_memcmp() always inspects the full buffer regardless of where the
+ * first difference is, so the comparison time does not depend on the secret.
+ * The length check below is not secret-dependent (the AuthCode length is fixed
+ * by the negotiated algorithm and controlled by the attacker anyway), so
+ * short-circuiting on it leaks nothing.
+ */
+bool constantTimeEqual(const std::vector<uint8_t>& computed,
+                       std::vector<uint8_t>::const_iterator receivedBegin,
+                       std::vector<uint8_t>::const_iterator receivedEnd)
+{
+    if (receivedEnd < receivedBegin)
+    {
+        return false;
+    }
+    if (computed.size() != static_cast<size_t>(receivedEnd - receivedBegin))
+    {
+        return false;
+    }
+    if (computed.empty())
+    {
+        return true;
+    }
+    return CRYPTO_memcmp(computed.data(), &*receivedBegin, computed.size()) ==
+           0;
+}
+
+} // namespace
 
 AlgoSHA1::AlgoSHA1(const std::vector<uint8_t>& sik) :
     Interface(SHA1_96_AUTHCODE_LENGTH)
@@ -48,9 +93,9 @@ bool AlgoSHA1::verifyIntegrityData(
         packet.data() + message::parser::RMCP_SESSION_HEADER_SIZE, length);
 
     // Verify if the generated integrity data for the packet and the received
-    // integrity data matches.
-    return (std::equal(output.begin(), output.end(), integrityDataBegin,
-                       integrityDataEnd));
+    // integrity data matches, using a constant-time comparison so the check
+    // cannot be turned into an HMAC-recovery timing oracle (CWE-208).
+    return constantTimeEqual(output, integrityDataBegin, integrityDataEnd);
 }
 
 std::vector<uint8_t> AlgoSHA1::generateIntegrityData(
@@ -114,9 +159,9 @@ bool AlgoSHA256::verifyIntegrityData(
         packet.data() + message::parser::RMCP_SESSION_HEADER_SIZE, length);
 
     // Verify if the generated integrity data for the packet and the received
-    // integrity data matches.
-    return (std::equal(output.begin(), output.end(), integrityDataBegin,
-                       integrityDataEnd));
+    // integrity data matches, using a constant-time comparison so the check
+    // cannot be turned into an HMAC-recovery timing oracle (CWE-208).
+    return constantTimeEqual(output, integrityDataBegin, integrityDataEnd);
 }
 
 std::vector<uint8_t> AlgoSHA256::generateIntegrityData(
