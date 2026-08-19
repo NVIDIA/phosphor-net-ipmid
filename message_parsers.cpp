@@ -419,6 +419,12 @@ namespace asfparser
 {
 std::shared_ptr<Message> unflatten(std::vector<uint8_t>& inPacket)
 {
+    if (inPacket.size() < sizeof(AsfMessagePing_t))
+    {
+        throw std::runtime_error(
+            "ASF Ping Message size is less than the expected size");
+    }
+
     auto message = std::make_shared<Message>();
 
     auto header = reinterpret_cast<AsfMessagePing_t*>(inPacket.data());
