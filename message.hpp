@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <memory>
 #include <numeric>
+#include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 namespace message
@@ -40,6 +42,27 @@ enum class RmcpMsgType : uint8_t
     PONG = 0x40,
 };
 #endif // RMCP_PING
+
+/**
+ * @brief Reinterpret a packet buffer as a header struct, after verifying
+ *        the buffer is large enough to hold it
+ *
+ * @param[in] packet - Buffer to reinterpret
+ *
+ * @return Pointer to the header struct
+ *
+ * @throw std::runtime_error if the buffer is smaller than sizeof(T)
+ */
+template <typename T>
+const T* castHeader(const std::vector<uint8_t>& packet)
+{
+    static_assert(std::is_trivially_copyable_v<T> && (alignof(T) == 1));
+    if (packet.size() < sizeof(T))
+    {
+        throw std::runtime_error("Packet too small");
+    }
+    return reinterpret_cast<const T*>(packet.data());
+}
 
 namespace LAN
 {
@@ -182,8 +205,7 @@ struct Message
         command |= (static_cast<uint32_t>(payloadType) << 16);
         if (payloadType == PayloadType::IPMI)
         {
-            auto request =
-                reinterpret_cast<LAN::header::Request*>(payload.data());
+            auto request = castHeader<LAN::header::Request>(payload);
             command |= request->netfn << 8;
             command |= static_cast<uint32_t>(request->cmd);
         }
@@ -218,8 +240,7 @@ struct Message
                 sizeof(LAN::header::Response) + output.size() +
                 sizeof(LAN::trailer::Response));
 
-            auto reqHeader =
-                reinterpret_cast<LAN::header::Request*>(payload.data());
+            auto reqHeader = castHeader<LAN::header::Request>(payload);
             auto respHeader = reinterpret_cast<LAN::header::Response*>(
                 outMessage->payload.data());
 
