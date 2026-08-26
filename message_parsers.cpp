@@ -16,19 +16,13 @@ namespace parser
 std::tuple<std::shared_ptr<Message>, SessionHeader> unflatten(
     std::vector<uint8_t>& inPacket)
 {
-    // Check if the packet has at least the size of the RMCP Header
-    if (inPacket.size() < sizeof(RmcpHeader_t))
-    {
-        throw std::runtime_error("RMCP Header missing");
-    }
-
-    auto rmcpHeaderPtr = reinterpret_cast<RmcpHeader_t*>(inPacket.data());
+    auto rmcpHeaderPtr = castHeader<RmcpHeader_t>(inPacket);
 
     // Verify if the fields in the RMCP header conforms to the specification
     if ((rmcpHeaderPtr->version != RMCP_VERSION) ||
         (rmcpHeaderPtr->rmcpSeqNum != RMCP_SEQ) ||
-        (rmcpHeaderPtr->classOfMsg < static_cast<uint8_t>(ClassOfMsg::ASF) &&
-         rmcpHeaderPtr->classOfMsg > static_cast<uint8_t>(ClassOfMsg::OEM)))
+        ((rmcpHeaderPtr->classOfMsg != static_cast<uint8_t>(ClassOfMsg::ASF)) &&
+         (rmcpHeaderPtr->classOfMsg != static_cast<uint8_t>(ClassOfMsg::IPMI))))
     {
         throw std::runtime_error("RMCP Header is invalid");
     }
@@ -43,7 +37,7 @@ std::tuple<std::shared_ptr<Message>, SessionHeader> unflatten(
 #endif // RMCP_PING
     }
 
-    auto sessionHeaderPtr = reinterpret_cast<BasicHeader_t*>(inPacket.data());
+    auto sessionHeaderPtr = castHeader<BasicHeader_t>(inPacket);
 
     // Read the Session Header and invoke the parser corresponding to the
     // header type
@@ -95,12 +89,7 @@ namespace ipmi15parser
 
 std::shared_ptr<Message> unflatten(std::vector<uint8_t>& inPacket)
 {
-    if (inPacket.size() < sizeof(SessionHeader_t))
-    {
-        throw std::runtime_error("IPMI1.5 Session Header Missing");
-    }
-
-    auto header = reinterpret_cast<SessionHeader_t*>(inPacket.data());
+    auto header = castHeader<SessionHeader_t>(inPacket);
 
     uint32_t sessionID = endian::from_ipmi(header->sessId);
     if (sessionID != session::sessionZero)
@@ -158,8 +147,8 @@ std::vector<uint8_t> flatten(
 
     // Insert the Session Trailer
     packet.resize(packet.size() + sizeof(SessionTrailer_t));
-    auto trailer =
-        reinterpret_cast<SessionTrailer_t*>(packet.data() + packet.size());
+    auto trailer = reinterpret_cast<SessionTrailer_t*>(
+        packet.data() + packet.size() - sizeof(SessionTrailer_t));
     trailer->legacyPad = 0x00;
 
     return packet;
@@ -172,13 +161,7 @@ namespace ipmi20parser
 
 std::shared_ptr<Message> unflatten(std::vector<uint8_t>& inPacket)
 {
-    // Check if the packet has at least the Session Header
-    if (inPacket.size() < sizeof(SessionHeader_t))
-    {
-        throw std::runtime_error("IPMI2.0 Session Header Missing");
-    }
-
-    auto header = reinterpret_cast<SessionHeader_t*>(inPacket.data());
+    auto header = castHeader<SessionHeader_t>(inPacket);
 
     uint32_t sessionID = endian::from_ipmi(header->sessId);
 
@@ -419,9 +402,15 @@ namespace asfparser
 {
 std::shared_ptr<Message> unflatten(std::vector<uint8_t>& inPacket)
 {
-    auto message = std::make_shared<Message>();
+    auto header = castHeader<AsfMessagePing_t>(inPacket);
 
-    auto header = reinterpret_cast<AsfMessagePing_t*>(inPacket.data());
+    if ((endian::from_network(header->iana) != parser::ASF_IANA) ||
+        (header->msgType != static_cast<uint8_t>(RmcpMsgType::PING)))
+    {
+        throw std::runtime_error("Invalid ASF Ping message");
+    }
+
+    auto message = std::make_shared<Message>();
 
     message->payloadType = PayloadType::IPMI;
     message->rmcpMsgClass = ClassOfMsg::ASF;
