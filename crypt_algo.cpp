@@ -8,7 +8,10 @@
 #include <openssl/rand.h>
 
 #include <algorithm>
+#include <limits>
+#include <memory>
 #include <numeric>
+#include <stdexcept>
 
 namespace cipher
 {
@@ -23,18 +26,25 @@ std::vector<uint8_t> AlgoAES128::decryptPayload(
     const std::vector<uint8_t>& packet, const size_t sessHeaderLen,
     const size_t payloadLen) const
 {
-    // verify packet size minimal: sessHeaderLen + payloadLen
-    // and payloadLen is more than AESCBC128ConfHeader
-    if (packet.size() < (sessHeaderLen + payloadLen) ||
-        payloadLen < AESCBC128ConfHeader)
+    // Overflow-safe bounds check; payload must hold the IV plus >= 1 block.
+    if ((packet.size() < sessHeaderLen) ||
+        ((packet.size() - sessHeaderLen) < payloadLen) ||
+        (payloadLen < (AESCBC128ConfHeader + AESCBC128BlockSize)))
     {
         throw std::runtime_error("Invalid data length");
     }
 
-    auto plainPayload =
-        decryptData(packet.data() + sessHeaderLen,
-                    packet.data() + sessHeaderLen + AESCBC128ConfHeader,
-                    payloadLen - AESCBC128ConfHeader);
+    // Ciphertext must be block-aligned and fit the int taken by EVP.
+    const size_t cipherLen = payloadLen - AESCBC128ConfHeader;
+    if (((cipherLen % AESCBC128BlockSize) != 0) ||
+        (cipherLen > static_cast<size_t>(std::numeric_limits<int>::max())))
+    {
+        throw std::runtime_error("Invalid data length");
+    }
+
+    auto plainPayload = decryptData(
+        packet.data() + sessHeaderLen,
+        packet.data() + sessHeaderLen + AESCBC128ConfHeader, cipherLen);
 
     if (plainPayload.size() == 0)
     {
@@ -76,9 +86,9 @@ std::vector<uint8_t> AlgoAES128::encryptPayload(
      * The following logic calculates the number of padding bytes to be added to
      * the payload data. This would ensure that the length is a multiple of the
      * block size of algorithm being used. For the AES algorithm, the block size
-     * is 16 bytes.
+     * is 16 bytes. The mask keeps paddingLen in the 0..15 range per spec.
      */
-    auto paddingLen = AESCBC128BlockSize - ((payloadLen + 1) & 0xF);
+    auto paddingLen = (AESCBC128BlockSize - ((payloadLen + 1) & 0xF)) & 0xF;
 
     /*
      * The additional field is for the Confidentiality Pad Length field. For the
