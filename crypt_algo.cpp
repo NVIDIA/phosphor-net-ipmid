@@ -7,7 +7,10 @@
 #include <openssl/rand.h>
 
 #include <algorithm>
+#include <limits>
+#include <memory>
 #include <numeric>
+#include <stdexcept>
 
 namespace cipher
 {
@@ -24,16 +27,28 @@ std::vector<uint8_t> AlgoAES128::decryptPayload(
 {
     // verify packet size minimal: sessHeaderLen + payloadLen
     // and payloadLen is more than AESCBC128ConfHeader
-    if (packet.size() < (sessHeaderLen + payloadLen) ||
-        payloadLen < AESCBC128ConfHeader)
+    if ((packet.size() < sessHeaderLen) ||
+        ((packet.size() - sessHeaderLen) < payloadLen) ||
+        (payloadLen < (AESCBC128ConfHeader + AESCBC128BlockSize)))
     {
         throw std::runtime_error("Invalid data length");
     }
 
-    auto plainPayload =
-        decryptData(packet.data() + sessHeaderLen,
-                    packet.data() + sessHeaderLen + AESCBC128ConfHeader,
-                    payloadLen - AESCBC128ConfHeader);
+    const size_t cipherLen = payloadLen - AESCBC128ConfHeader;
+    if (((cipherLen % AESCBC128BlockSize) != 0) ||
+        (cipherLen > static_cast<size_t>(std::numeric_limits<int>::max())))
+    {
+        throw std::runtime_error("Invalid data length");
+    }
+
+    auto plainPayload = decryptData(
+        packet.data() + sessHeaderLen,
+        packet.data() + sessHeaderLen + AESCBC128ConfHeader, cipherLen);
+
+    if (plainPayload.empty())
+    {
+        throw std::runtime_error("Decrypted payload is empty");
+    }
 
     /*
      * The confidentiality pad length is the last byte in the payload, it would
@@ -41,13 +56,17 @@ std::vector<uint8_t> AlgoAES128::decryptPayload(
      * that buffer overrun doesn't happen.
      */
     size_t confPadLength = plainPayload.back();
-    auto padLength = std::min(plainPayload.size() - 1, confPadLength);
+    if ((confPadLength > confPadBytes.size()) ||
+        (confPadLength > (plainPayload.size() - 1)))
+    {
+        throw std::runtime_error("Invalid confidentiality pad length");
+    }
 
-    auto plainPayloadLen = plainPayload.size() - padLength - 1;
+    auto plainPayloadLen = plainPayload.size() - confPadLength - 1;
 
     // Additional check if the confidentiality pad bytes are as expected
     if (!std::equal(plainPayload.begin() + plainPayloadLen,
-                    plainPayload.begin() + plainPayloadLen + padLength,
+                    plainPayload.begin() + plainPayloadLen + confPadLength,
                     confPadBytes.begin()))
     {
         throw std::runtime_error("Confidentiality pad bytes check failed");
@@ -69,7 +88,7 @@ std::vector<uint8_t> AlgoAES128::encryptPayload(
      * block size of algorithm being used. For the AES algorithm, the block size
      * is 16 bytes.
      */
-    auto paddingLen = AESCBC128BlockSize - ((payloadLen + 1) & 0xF);
+    auto paddingLen = (AESCBC128BlockSize - ((payloadLen + 1) & 0xF)) & 0xF;
 
     /*
      * The additional field is for the Confidentiality Pad Length field. For the

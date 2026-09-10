@@ -8,6 +8,8 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 
+#include <cstdint>
+#include <numeric>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -414,8 +416,8 @@ TEST(CryptAlgo, AES_CBC_128_DecryptPayloadValidate)
      * implementation
      */
 
-    std::vector<uint8_t> payload = {1, 2,  3,  4,  5,  6,  7,  8,
-                                    9, 10, 11, 12, 13, 14, 15, 16};
+    std::vector<uint8_t> payload = {1, 2,  3,  4,  5,  6,  7, 8,
+                                    9, 10, 11, 12, 13, 14, 15};
     payload.resize(payload.size() + 1);
     payload.back() = 0;
 
@@ -481,6 +483,143 @@ TEST(CryptAlgo, AES_CBC_128_DecryptPayloadValidate)
     /*
      * Step -3 Check if the plain payload matches with the decrypted one
      */
-    auto check = std::equal(payload.begin(), payload.end(), plain.begin());
+    ASSERT_EQ(payload.size() - 1, plain.size());
+    auto check = std::equal(plain.begin(), plain.end(), payload.begin());
     EXPECT_EQ(true, check);
+}
+
+TEST(CryptAlgo, AES_CBC_128_RoundTripAllPadLengths)
+{
+    std::vector<uint8_t> k2(cipher::crypt::AlgoAES128::AESCBC128BlockSize,
+                            0x2A);
+    cipher::crypt::AlgoAES128 algo(k2);
+
+    constexpr size_t maxLen =
+        2 * cipher::crypt::AlgoAES128::AESCBC128BlockSize + 1;
+    for (size_t len = 1; len <= maxLen; ++len)
+    {
+        std::vector<uint8_t> payload(len);
+        std::iota(payload.begin(), payload.end(), 0);
+        auto expected = payload;
+
+        auto cipherText = algo.encryptPayload(payload);
+
+        ASSERT_EQ(0, (cipherText.size() -
+                      cipher::crypt::AlgoAES128::AESCBC128ConfHeader) %
+                         cipher::crypt::AlgoAES128::AESCBC128BlockSize)
+            << "payload length " << len;
+
+        auto plain = algo.decryptPayload(cipherText, 0, cipherText.size());
+
+        ASSERT_EQ(expected.size(), plain.size()) << "payload length " << len;
+        EXPECT_EQ(expected, plain) << "payload length " << len;
+    }
+}
+
+TEST(CryptAlgo, AES_CBC_128_DecryptPayloadIvOnlyRejected)
+{
+    std::vector<uint8_t> k2(cipher::crypt::AlgoAES128::AESCBC128BlockSize,
+                            0x2A);
+    cipher::crypt::AlgoAES128 algo(k2);
+
+    std::vector<uint8_t> packet(cipher::crypt::AlgoAES128::AESCBC128ConfHeader,
+                                0);
+
+    EXPECT_THROW(algo.decryptPayload(packet, 0, packet.size()),
+                 std::runtime_error);
+}
+
+TEST(CryptAlgo, AES_CBC_128_DecryptPayloadPartialBlockRejected)
+{
+    std::vector<uint8_t> k2(cipher::crypt::AlgoAES128::AESCBC128BlockSize,
+                            0x2A);
+    cipher::crypt::AlgoAES128 algo(k2);
+
+    std::vector<uint8_t> packet(
+        cipher::crypt::AlgoAES128::AESCBC128ConfHeader +
+            cipher::crypt::AlgoAES128::AESCBC128BlockSize +
+            cipher::crypt::AlgoAES128::AESCBC128BlockSize / 2,
+        0);
+
+    EXPECT_THROW(algo.decryptPayload(packet, 0, packet.size()),
+                 std::runtime_error);
+}
+
+TEST(CryptAlgo, AES_CBC_128_DecryptPayloadHeaderExceedsPacketRejected)
+{
+    std::vector<uint8_t> k2(cipher::crypt::AlgoAES128::AESCBC128BlockSize,
+                            0x2A);
+    cipher::crypt::AlgoAES128 algo(k2);
+
+    std::vector<uint8_t> packet(64, 0);
+
+    EXPECT_THROW(
+        algo.decryptPayload(packet, packet.size() + 1,
+                            cipher::crypt::AlgoAES128::AESCBC128ConfHeader +
+                                cipher::crypt::AlgoAES128::AESCBC128BlockSize),
+        std::runtime_error);
+}
+
+TEST(CryptAlgo, AES_CBC_128_DecryptPayloadOversizedPadRejected)
+{
+    std::vector<uint8_t> k2(cipher::crypt::AlgoAES128::AESCBC128BlockSize,
+                            0x2A);
+    cipher::crypt::AlgoAES128 algo(k2);
+
+    std::vector<uint8_t> plaintext(
+        2 * cipher::crypt::AlgoAES128::AESCBC128BlockSize, 0);
+    plaintext.back() = 219;
+
+    std::vector<uint8_t> packet(
+        cipher::crypt::AlgoAES128::AESCBC128ConfHeader + plaintext.size());
+
+    if (!RAND_bytes(packet.data(),
+                    cipher::crypt::AlgoAES128::AESCBC128ConfHeader))
+    {
+        FAIL() << "RAND_bytes failed";
+    }
+
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!EVP_EncryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, k2.data(),
+                            packet.data()))
+    {
+        EVP_CIPHER_CTX_free(ctx);
+        FAIL() << "EVP_EncryptInit_ex failed for type AES-CBC-128";
+    }
+
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+    int outputLen = 0;
+
+    if (!EVP_EncryptUpdate(
+            ctx, packet.data() + cipher::crypt::AlgoAES128::AESCBC128ConfHeader,
+            &outputLen, plaintext.data(), plaintext.size()))
+    {
+        EVP_CIPHER_CTX_free(ctx);
+        FAIL() << "EVP_EncryptUpdate failed";
+    }
+    EVP_CIPHER_CTX_free(ctx);
+
+    ASSERT_EQ(static_cast<int>(plaintext.size()), outputLen);
+
+    try
+    {
+        algo.decryptPayload(packet, 0, packet.size());
+        FAIL() << "decryptPayload accepted an oversized pad length";
+    }
+    catch (const std::runtime_error& e)
+    {
+        EXPECT_STREQ("Invalid confidentiality pad length", e.what());
+    }
+}
+
+TEST(CryptAlgo, AES_CBC_128_DecryptPayloadOverflowRejected)
+{
+    std::vector<uint8_t> k2(cipher::crypt::AlgoAES128::AESCBC128BlockSize,
+                            0x2A);
+    cipher::crypt::AlgoAES128 algo(k2);
+
+    std::vector<uint8_t> packet(64, 0);
+
+    EXPECT_THROW(algo.decryptPayload(packet, 32, SIZE_MAX - 16),
+                 std::runtime_error);
 }
